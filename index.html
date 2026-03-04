@@ -547,6 +547,7 @@
         let expenses = JSON.parse(localStorage.getItem('expenses')) || [];
         let userName = localStorage.getItem('userName') || '主人';
         let isDarkMode = localStorage.getItem('darkMode') === 'true';
+        let notificationsEnabled = localStorage.getItem('notificationsEnabled') === 'true';
         let currentLang = localStorage.getItem('lang') || 'zh';
         let selectedPetId = null;
         let weightChart = null;
@@ -573,7 +574,7 @@
                 if (err.name === 'QuotaExceededError') {
                     alert('儲存空間已滿！這通常是因為照片檔案太大。請嘗試使用較小的圖片。');
                 } else {
-                    alert('儲存資料時發生錯誤。');
+                    alert(`儲存資料時發生錯誤: ${err.name} - ${err.message}`);
                 }
             }
         }
