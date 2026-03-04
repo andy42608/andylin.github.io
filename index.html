@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>毛孩健康守護者 - PetHealth Guardian</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#FFD700">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/616/616408.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').then(reg => {
+                    console.log('Service Worker 註冊成功', reg);
+                }).catch(err => {
+                    console.log('Service Worker 註冊失敗', err);
+                });
+            });
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #FDFBF7;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            /* 優先讀取您資料夾中的 貓貓.PNG */
+            background-image: var(--bg-image, url('貓貓.PNG'), url('bg.jpg'), url('https://img.freepik.com/premium-vector/cute-dog-cat-best-friends-illustration-poster-banner-greeting-card-design-hand-drawn-animal-cartoon-style_1142-20516.jpg?w=826'));
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            opacity: 0.18;
+            z-index: -1;
+            pointer-events: none;
+        }
+        body.dark-mode {
+            background-color: #1a1a1a;
+            color: #f0f0f0;
+        }
+        body.dark-mode::before {
+            opacity: 0.05;
+            filter: grayscale(1) brightness(0.5);
+        }
+        .dark-mode .bg-white { background-color: #2d2d2d !important; color: #f0f0f0 !important; }
+        .dark-mode .text-gray-800 { color: #f0f0f0 !important; }
+        .dark-mode .text-gray-500 { color: #aaa !important; }
+        .dark-mode .bg-gray-50 { background-color: #3d3d3d !important; }
+        .dark-mode .border-gray-100 { border-color: #444 !important; }
+        .dark-mode header { background-color: #1a1a1a !important; }
+        .dark-mode .tab-bar { background-color: #2d2d2d !important; border-top-color: #444 !important; }
+        
+        .pet-card { transition: transform 0.2s; cursor: pointer; }
+        .pet-card:active { transform: scale(0.98); }
+        .tab-bar { box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
+        .modal-content { transition: transform 0.3s ease-out; }
+        .modal.hidden .modal-content { transform: translateY(100%); }
+
+        /* Animation for view switching */
+        .view-container {
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .floating-pet {
+            position: fixed;
+            z-index: -1;
+            opacity: 0.15;
+            pointer-events: none;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(5deg); }
+        }
+
+        .dark-mode .floating-pet {
+            opacity: 0.05;
+            filter: grayscale(1) brightness(1.5);
+        }
+    </style>
+</head>
+<body class="pb-24">
+
+    <!-- Header -->
+    <header class="bg-white/80 backdrop-blur-md px-6 pt-10 pb-4 flex justify-between items-center sticky top-0 z-10 transition-colors border-b border-orange-100/50 dark:border-gray-800">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 bg-orange-100 rounded-2xl flex items-center justify-center text-orange-500 animate-pulse sm:hidden">
+                <i class="fas fa-dog"></i>
+            </div>
+            <div>
+                <h1 id="user-greeting" class="text-2xl font-bold text-gray-800">早安，主人！</h1>
+                <p id="sub-greeting" class="text-gray-500 text-[11px] tracking-wider uppercase">Today's Care Plan</p>
+            </div>
+        </div>
+        <div id="user-avatar" class="w-12 h-12 bg-gradient-to-tr from-yellow-400 to-orange-400 rounded-full flex items-center justify-center text-white text-xl shadow-lg ring-4 ring-white dark:ring-gray-800 transition-transform hover:rotate-12 cursor-pointer">
+            <i class="fas fa-paw"></i>
+        </div>
+    </header>
+
+    <!-- Views Container -->
+    <main id="app-content" class="px-6 space-y-6 mt-4">
+        
+        <!-- 1. Home View -->
+        <div id="view-home" class="space-y-6">
+            <!-- Birthday Card -->
+            <div id="birthday-card-container"></div>
+
+            <!-- Health Score Card -->
+            <div class="bg-gradient-to-br from-yellow-300 to-orange-400 rounded-3xl p-6 text-white shadow-lg">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <span id="label-avg-score" class="text-sm opacity-80">今日平均健康分數</span>
+                        <div id="avg-health-score" class="text-4xl font-bold mt-1">--</div>
+                    </div>
+                    <div class="bg-white/20 p-2 rounded-xl backdrop-blur-md"><i class="fas fa-chart-line"></i></div>
+                </div>
+                <p id="health-score-message" class="mt-4 text-sm font-medium">✨ 快來加入毛孩並記錄健康狀況吧！</p>
+            </div>
+
+            <!-- Pet List -->
+            <section>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 id="label-my-pets" class="text-lg font-bold text-gray-800">我的毛孩</h2>
+                    <button onclick="toggleModal('add-pet-modal')" class="text-orange-500 text-sm font-bold" id="btn-add-pet-label">+ 新增毛孩</button>
+                </div>
+                <div id="pet-list" class="space-y-4"></div>
+            </section>
+
+            <!-- Tasks -->
+            <section>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 id="label-reminders" class="text-lg font-bold text-gray-800">今日提醒</h2>
+                    <button onclick="toggleModal('add-task-modal')" class="text-orange-500 text-sm font-bold" id="btn-add-task-label">+ 新增提醒</button>
+                </div>
+                <div id="task-list" class="space-y-3"></div>
+            </section>
+
+            <!-- Expenses -->
+            <section>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 id="label-expenses" class="text-lg font-bold text-gray-800">近期花費</h2>
+                    <button onclick="toggleModal('add-expense-modal')" class="text-orange-500 text-sm font-bold" id="btn-add-expense-label">+ 新增花費</button>
+                </div>
+                <div id="expense-list" class="space-y-3"></div>
+            </section>
+        </div>
+
+        <!-- 2. Health Detail View (Initially Hidden) -->
+        <div id="view-health" class="hidden space-y-6">
+            <button onclick="showView('home')" class="text-gray-400 text-sm"><i class="fas fa-arrow-left mr-1"></i> 返回首頁</button>
+            <h2 id="health-pet-name" class="text-2xl font-bold text-gray-800">健康詳情</h2>
+            
+            <div class="bg-white p-4 rounded-3xl shadow-sm border border-gray-100">
+                <h3 class="font-bold text-gray-800 mb-4">體重趨勢</h3>
+                <canvas id="weightChart"></canvas>
+                <div class="flex space-x-2 mt-4">
+                    <button onclick="toggleModal('add-weight-modal')" class="flex-1 bg-yellow-400 text-white font-bold py-3 rounded-xl shadow-sm">紀錄體重</button>
+                    <button onclick="runAIAnalysis()" class="flex-1 bg-gradient-to-r from-purple-500 to-indigo-600 text-white font-bold py-3 rounded-xl shadow-sm">AI 健康分析</button>
+                </div>
+            </div>
+
+            <section>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold text-gray-800">餵藥提醒</h2>
+                    <button onclick="toggleModal('add-medication-modal')" class="text-orange-500 text-sm font-bold">+ 新增藥品</button>
+                </div>
+                <div id="medication-list" class="space-y-3"></div>
+            </section>
+
+            <section>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold text-gray-800">醫療紀錄</h2>
+                    <button onclick="toggleModal('add-medical-modal')" class="text-orange-500 text-sm font-bold">+ 新增紀錄</button>
+                </div>
+                <div id="medical-list" class="space-y-3"></div>
+            </section>
+        </div>
+
+        <!-- 5. Settings View (Profile) -->
+        <!-- 3. Analysis View -->
+        <div id="view-analysis" class="hidden space-y-6">
+            <button onclick="showView('home')" class="text-gray-400 text-sm"><i class="fas fa-arrow-left mr-1"></i> 返回首頁</button>
+            <h2 id="label-expense-analysis" class="text-2xl font-bold text-gray-800">費用分析</h2>
+            <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h4 class="text-sm font-semibold text-center mb-2">費用佔比</h4>
+                        <div class="h-48 w-full"><canvas id="expensePieChart"></canvas></div>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-semibold text-center mb-2">近六個月趨勢</h4>
+                        <div class="h-48 w-full"><canvas id="expenseBarChart"></canvas></div>
+                    </div>
+                </div>
+                <div id="expense-summary" class="text-center mt-4"></div>
+                <button onclick="toggleModal('add-expense-modal')" class="w-full mt-4 text-orange-500 font-bold text-sm">+ 新增花費紀錄</button>
+            </div>
+        </div>
+
+        <!-- 4. Settings/Profile View -->
+        <div id="view-profile" class="hidden space-y-6">
+            <h2 id="label-settings-title" class="text-2xl font-bold text-gray-800">設定與我的</h2>
+            
+            <!-- Upgrade to Pro Banner -->
+            <div id="pro-banner" onclick="toggleModal('subscription-modal')" class="bg-gradient-to-r from-purple-500 to-indigo-600 rounded-3xl p-6 text-white shadow-lg cursor-pointer transition-transform hover:scale-105">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center space-x-4">
+                        <div class="text-3xl">✨</div>
+                        <div>
+                            <h3 class="font-bold">升級至專業版</h3>
+                            <p class="text-xs opacity-80">解鎖 AI 分析、費用趨勢等強大功能</p>
+                        </div>
+                    </div>
+                    <i class="fas fa-chevron-right"></i>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-6">
+                <div>
+                    <h3 class="font-bold text-gray-800 mb-4" id="label-sys-settings">系統設定</h3>
+                    <div class="flex justify-between items-center mb-4">
+                        <span class="text-sm font-medium" id="label-dark-mode">暗黑模式</span>
+                        <button onclick="toggleDarkMode()" id="dark-mode-toggle" class="w-12 h-6 bg-gray-200 rounded-full relative transition-colors">
+                            <div id="dark-mode-dot" class="w-5 h-5 bg-white rounded-full absolute left-0.5 top-0.5 shadow-sm transition-transform"></div>
+                        </button>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-medium block" id="label-lang">語言設定 (Language)</label>
+                        <select id="lang-select" onchange="changeLanguage(this.value)" class="w-full bg-gray-50 border-none rounded-xl p-3 focus:ring-2 focus:ring-yellow-400">
+                            <option value="zh">繁體中文</option>
+                            <option value="en">English</option>
+                            <option value="ja">日本語</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="border-t border-gray-100 pt-6">
+                    <h3 class="font-bold text-gray-800 mb-4">精選推薦</h3>
+                    <div class="space-y-3">
+                        <a href="https://www.google.com/search?q=高CP值寵物飼料推薦" target="_blank" class="bg-gray-50 p-4 rounded-2xl flex items-center justify-between transition-transform hover:scale-105 dark:bg-gray-700">
+                            <div class="flex items-center space-x-4">
+                                <i class="fas fa-bone text-orange-400 text-lg"></i>
+                                <div>
+                                    <h4 class="font-bold text-sm">探索高 CP 值飼料</h4>
+                                    <p class="text-xs text-gray-400">兼顧營養與荷包的聰明選擇</p>
+                                </div>
+                            </div>
+                            <i class="fas fa-chevron-right text-gray-300"></i>
+                        </a>
+                        <a href="https://www.google.com/search?q=寵物保險方案比較" target="_blank" class="bg-gray-50 p-4 rounded-2xl flex items-center justify-between transition-transform hover:scale-105 dark:bg-gray-700">
+                            <div class="flex items-center space-x-4">
+                                <i class="fas fa-shield-alt text-blue-400 text-lg"></i>
+                                <div>
+                                    <h4 class="font-bold text-sm">了解寵物保險方案</h4>
+                                    <p class="text-xs text-gray-400">分擔醫療開銷，給毛孩全面保障</p>
+                                </div>
+                            </div>
+                            <i class="fas fa-chevron-right text-gray-300"></i>
+                        </a>
+                    </div>
+                </div>
+                <div class="border-t border-gray-100 pt-6 space-y-4">
+                    <h3 class="font-bold text-gray-800 mb-2">使用者名稱</h3>
+                    <input type="text" id="user-name-input" class="w-full bg-gray-50 border-none rounded-xl p-3 focus:ring-2 focus:ring-yellow-400">
+                    <button onclick="saveUserName()" class="w-full bg-yellow-400 text-white font-bold py-3 rounded-xl shadow-sm">儲存名字</button>
+                </div>
+                <div class="border-t border-gray-100 pt-6 space-y-4">
+                    <h3 class="font-bold text-gray-800 mb-2">背景設定</h3>
+                    <p class="text-xs text-gray-400">上傳您喜歡的圖案作為 App 背景</p>
+                    <input type="file" onchange="handleBgUpload(event)" accept="image/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100 cursor-pointer">
+                    <button onclick="resetBg()" class="text-[10px] text-gray-400 hover:underline">恢復預設背景</button>
+                </div>
+
+                <div class="border-t border-gray-100 pt-6 space-y-4">
+                    <h3 class="font-bold text-gray-800 mb-2" id="label-backup">資料備份</h3>
+                    <button onclick="exportData()" class="w-full bg-yellow-400 text-white font-bold py-3 rounded-xl shadow-sm" id="btn-export">匯出資料 (JSON)</button>
+                    <label class="block">
+                        <input type="file" onchange="importData(event)" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-50 file:text-yellow-700 hover:file:bg-yellow-100 cursor-pointer">
+                    </label>
+                </div>
+
+                <div class="border-t border-gray-100 pt-6">
+                    <h3 class="font-bold text-gray-800 mb-4"><i class="fab fa-apple mr-2"></i>安裝到 iPhone</h3>
+                    <div class="bg-blue-50 p-4 rounded-2xl dark:bg-blue-900/20">
+                        <ol class="text-xs text-blue-800 dark:text-blue-300 space-y-2 list-decimal list-inside">
+                            <li>使用 <b>Safari</b> 瀏覽器開啟 index.html</li>
+                            <li>點擊工具列中央的 <b>分享圖示 <i class="fas fa-share-square"></i></b></li>
+                            <li>向下滑動找到並點擊 <b>「加入主畫面」 <i class="fas fa-plus-square"></i></b></li>
+                            <li>點擊右上角的 <b>「新增」</b> 即可完成！</li>
+                        </ol>
+                        <p class="text-[10px] text-blue-600 dark:text-blue-400 mt-3 italic">* 這樣就能像 App 一樣在桌面直接開啟，且支援離線使用。</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modals (Add Pet, Task, Expense, Weight, Medical, AI) -->
+    <div id="modal-container">
+        <!-- Add Pet Modal -->
+        <div id="add-pet-modal" class="fixed inset-0 bg-black/50 hidden z-50 flex items-end sm:items-center justify-center modal">
+            <div class="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-8 modal-content">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold">新增毛孩檔案</h3>
+                    <button onclick="toggleModal('add-pet-modal')" class="text-gray-400"><i class="fas fa-times"></i></button>
+                </div>
+                <form onsubmit="handleAddPet(event)" class="space-y-4">
+                    <input type="text" id="pet-name" placeholder="毛孩姓名" required class="w-full bg-gray-50 rounded-xl p-3 border-none">
+                    <select id="pet-type" class="w-full bg-gray-50 rounded-xl p-3 border-none">
+                        <option value="狗">狗狗 🐶</option>
+                        <option value="貓">貓咪 🐱</option>
+                        <option value="其他">其他 🐹</option>
+                    </select>
+                    <input type="file" id="pet-photo" accept="image/*" class="w-full text-sm">
+                    <button type="submit" class="w-full bg-yellow-400 text-white font-bold py-4 rounded-xl shadow-md">完成建立</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Add Task Modal -->
+        <div id="add-task-modal" class="fixed inset-0 bg-black/50 hidden z-50 flex items-end sm:items-center justify-center modal">
+            <div class="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-8 modal-content">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold">新增提醒事項</h3>
+                    <button onclick="toggleModal('add-task-modal')"><i class="fas fa-times"></i></button>
+                </div>
+                <form onsubmit="handleAddTask(event)" class="space-y-4">
+                    <input type="text" id="task-title" placeholder="提醒內容" required class="w-full bg-gray-50 rounded-xl p-3 border-none">
+                    <input type="text" id="task-time" placeholder="時間 (如：18:00)" required class="w-full bg-gray-50 rounded-xl p-3 border-none">
+                    <button type="submit" class="w-full bg-yellow-400 text-white font-bold py-4 rounded-xl">儲存提醒</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Add Expense Modal -->
+        <div id="add-expense-modal" class="fixed inset-0 bg-black/50 hidden z-50 flex items-end sm:items-center justify-center modal">
+            <div class="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-8 modal-content">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold">新增費用</h3>
+                    <button onclick="toggleModal('add-expense-modal')"><i class="fas fa-times"></i></button>
+                </div>
+                <form onsubmit="handleAddExpense(event)" class="space-y-4">
+                    <select id="expense-category" class="w-full bg-gray-50 rounded-xl p-3">
+                        <option value="飼料">飼料 🍖</option>
+                        <option value="醫療">醫療 🏥</option>
+                        <option value="美容">美容 🛁</option>
+                        <option value="玩具">玩具 🧸</option>
+                        <option value="其他">其他 📝</option>
+                    </select>
+                    <input type="number" id="expense-amount" placeholder="金額" required class="w-full bg-gray-50 rounded-xl p-3">
+                    <input type="date" id="expense-date" required class="w-full bg-gray-50 rounded-xl p-3">
+                    <button type="submit" class="w-full bg-yellow-400 text-white font-bold py-4 rounded-xl">儲存費用</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Add Weight Modal -->
+        <div id="add-weight-modal" class="fixed inset-0 bg-black/50 hidden z-50 flex items-end sm:items-center justify-center modal">
+            <div class="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-8 modal-content">
+                <h3 class="text-xl font-bold mb-6">紀錄體重</h3>
+                <form onsubmit="handleAddWeight(event)" class="space-y-4">
+                    <input type="number" step="0.1" id="weight-input" placeholder="體重 (kg)" required class="w-full bg-gray-50 rounded-xl p-3">
+                    <button type="submit" class="w-full bg-yellow-400 text-white font-bold py-4 rounded-xl">儲存</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Add Medical Modal -->
+        <div id="add-medical-modal" class="fixed inset-0 bg-black/50 hidden z-50 flex items-end sm:items-center justify-center modal">
+            <div class="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-8 modal-content">
+                <h3 class="text-xl font-bold mb-6">新增醫療紀錄</h3>
+                <form onsubmit="handleAddMedical(event)" class="space-y-4">
+                    <select id="medical-type" class="w-full bg-gray-50 rounded-xl p-3">
+                        <option value="疫苗">疫苗 💉</option>
+                        <option value="驅蟲">驅蟲 💊</option>
+                        <option value="門診">門診 🏥</option>
+                    </select>
+                    <input type="text" id="medical-note" placeholder="備註" required class="w-full bg-gray-50 rounded-xl p-3">
+                    <select id="medical-mood" class="w-full bg-gray-50 rounded-xl p-3">
+                        <option value="開心">😄 開心</option>
+                        <option value="平靜">😊 平靜</option>
+                        <option value="焦慮">😟 焦慮</option>
+                    </select>
+                    <button type="submit" class="w-full bg-yellow-400 text-white font-bold py-4 rounded-xl">儲存</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Add Medication Modal -->
+        <div id="add-medication-modal" class="fixed inset-0 bg-black/50 hidden z-50 flex items-end sm:items-center justify-center modal">
+            <div class="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-8 modal-content">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold">新增餵藥提醒</h3>
+                    <button onclick="toggleModal('add-medication-modal')"><i class="fas fa-times"></i></button>
+                </div>
+                <form onsubmit="handleAddMedication(event)" class="space-y-4">
+                    <div class="space-y-1">
+                        <label class="text-xs text-gray-400 ml-1">選擇藥品</label>
+                        <select id="med-name-select" onchange="handleMedSelectChange(this.value)" class="w-full bg-gray-50 rounded-xl p-3 border-none">
+                            <option value="心絲蟲藥">心絲蟲藥 (預防) 💊</option>
+                            <option value="全能狗/一錠除">全能狗 / 一錠除 (驅蟲) 🕷️</option>
+                            <option value="益生菌">益生菌 (腸胃保健) 🦠</option>
+                            <option value="魚油">魚油 (皮毛保健) 🐟</option>
+                            <option value="關節保健">關節保健粉 🦴</option>
+                            <option value="感冒藥">感冒/發炎藥 🤒</option>
+                            <option value="其他">其他 (自行輸入) ✍️</option>
+                        </select>
+                    </div>
+                    <div id="med-name-custom-container" class="hidden">
+                        <input type="text" id="med-name-custom" placeholder="請輸入藥品名稱" class="w-full bg-gray-50 rounded-xl p-3 border-none">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs text-gray-400 ml-1">劑量</label>
+                        <input type="text" id="med-dose" placeholder="劑量 (如：1 顆)" required class="w-full bg-gray-50 rounded-xl p-3">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs text-gray-400 ml-1">提醒時間</label>
+                        <input type="time" id="med-time" required class="w-full bg-gray-50 rounded-xl p-3">
+                    </div>
+                    <button type="submit" class="w-full bg-yellow-400 text-white font-bold py-4 rounded-xl shadow-md">確認新增</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- AI Modal -->
+        <div id="ai-analysis-modal" class="fixed inset-0 bg-black/50 hidden z-50 flex items-center justify-center modal">
+            <div class="bg-white w-full max-w-sm rounded-3xl p-8 modal-content">
+                <h3 class="text-xl font-bold mb-4">AI 健康報告</h3>
+                <div id="ai-content" class="space-y-4 text-gray-600"></div>
+                <button onclick="toggleModal('ai-analysis-modal')" class="mt-6 w-full py-3 text-gray-400 font-bold">關閉</button>
+            </div>
+        </div>
+
+        <!-- Subscription Modal -->
+        <div id="subscription-modal" class="fixed inset-0 bg-black/50 hidden z-50 flex items-center justify-center modal">
+            <div class="bg-white w-full max-w-sm rounded-3xl p-8 modal-content text-center">
+                <div class="text-5xl mb-4">💎</div>
+                <h3 class="text-xl font-bold mb-2">升級專業版</h3>
+                <p class="text-gray-500 text-sm mb-6">解鎖 AI 分析、雲端備份與詳細費用趨勢報告</p>
+                <div class="space-y-3">
+                    <button class="w-full bg-gradient-to-r from-purple-500 to-indigo-600 text-white font-bold py-4 rounded-xl shadow-md">立即升級 (每月 $99)</button>
+                    <button onclick="toggleModal('subscription-modal')" class="w-full py-3 text-gray-400 font-bold">先不用，謝謝</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab Bar -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 tab-bar flex justify-around items-center py-3 px-6 z-10">
+        <button id="btn-home" onclick="showView('home')" class="flex flex-col items-center text-yellow-500">
+            <i class="fas fa-home text-xl"></i><span class="text-[10px] mt-1">首頁</span>
+        </button>
+        <button id="btn-analysis" onclick="showView('analysis')" class="flex flex-col items-center text-gray-300">
+            <i class="fas fa-chart-pie text-xl"></i><span class="text-[10px] mt-1">分析</span>
+        </button>
+        <button id="btn-profile" onclick="showView('profile')" class="flex flex-col items-center text-gray-300">
+            <i class="fas fa-user text-xl"></i><span class="text-[10px] mt-1">我的</span>
+        </button>
+    </nav>
+
+    <script>
+        // --- State Management ---
+        let pets = JSON.parse(localStorage.getItem('pets')) || [];
+        let globalTasks = JSON.parse(localStorage.getItem('globalTasks')) || [];
+        let expenses = JSON.parse(localStorage.getItem('expenses')) || [];
+        let userName = localStorage.getItem('userName') || '主人';
+        let isDarkMode = localStorage.getItem('darkMode') === 'true';
+        let currentLang = localStorage.getItem('lang') || 'zh';
+        let selectedPetId = null;
+        let weightChart = null;
+        let expensePieChart = null, expenseBarChart = null;
+
+        const i18n = {
+            zh: { greeting: "早安，", subGreeting: "今天也要守護毛孩的健康喔", myPets: "我的毛孩", addPet: "+ 新增毛孩", reminders: "今日提醒", addReminder: "+ 新增提醒", expenses: "近期花費", addExpense: "+ 新增花費", settings: "設定與備份", sysSettings: "系統設定", darkMode: "暗黑模式", lang: "語言設定 (Language)", analysis: "費用分析", backup: "資料備份", export: "匯出資料 (JSON)", saveName: "儲存名字" },
+            en: { greeting: "Hi, ", subGreeting: "Let's care for your pets today", myPets: "My Pets", addPet: "+ Add Pet", reminders: "Reminders", addReminder: "+ Add Task", expenses: "Expenses", addExpense: "+ Add Expense", settings: "Settings", sysSettings: "System", darkMode: "Dark Mode", lang: "Language", analysis: "Expense Analysis", backup: "Backup", export: "Export JSON", saveName: "Save Name" },
+            ja: { greeting: "おはよう、", subGreeting: "今日もペットを大切に", myPets: "マイペット", addPet: "+ 追加", reminders: "予定", addReminder: "+ 予定追加", expenses: "支出", addExpense: "+ 支出追加", settings: "設定", sysSettings: "システム", darkMode: "ダークモード", lang: "言語設定", analysis: "支出分析", backup: "バックアップ", export: "JSON出力", saveName: "名前保存" }
+        };
+
+        // --- Core Functions ---
+        function saveAll() {
+            try {
+                localStorage.setItem('pets', JSON.stringify(pets));
+                localStorage.setItem('globalTasks', JSON.stringify(globalTasks));
+                localStorage.setItem('expenses', JSON.stringify(expenses));
+                localStorage.setItem('userName', userName);
+                localStorage.setItem('darkMode', isDarkMode);
+                localStorage.setItem('lang', currentLang);
+                renderAll();
+            } catch (err) {
+                console.error('儲存失敗：', err);
+                if (err.name === 'QuotaExceededError') {
+                    alert('儲存空間已滿！這通常是因為照片檔案太大。請嘗試使用較小的圖片。');
+                } else {
+                    alert('儲存資料時發生錯誤。');
+                }
+            }
+        }
+
+        function renderAll() {
+            applyDarkMode();
+            updateGreeting();
+            updateLanguageUI();
+            updateHealthScore();
+            
+            // Initial render for the default view (home)
+            renderPets();
+            renderTasks();
+            renderExpenses();
+            renderBirthdayCard();
+        }
+
+        function showView(view) {
+            document.querySelectorAll('main > div[id^="view-"]').forEach(v => v.classList.add('hidden'));
+            document.querySelectorAll('nav button').forEach(b => {
+                b.classList.remove('text-yellow-500');
+                b.classList.add('text-gray-300');
+            });
+
+            const targetView = document.getElementById('view-' + view);
+            if (targetView) targetView.classList.remove('hidden');
+
+            const targetButton = document.getElementById('btn-' + view);
+            if (targetButton) {
+                targetButton.classList.remove('text-gray-300');
+                targetButton.classList.add('text-yellow-500');
+            }
+            
+            // Re-render relevant parts when view changes
+            if (view === 'home') {
+                renderPets();
+                renderTasks();
+                renderExpenses();
+                renderBirthdayCard();
+            }
+            if (view === 'analysis') {
+                updateExpenseChart();
+            }
+            if (view === 'health') {
+                renderMedications();
+                renderMedicalRecords();
+                updateWeightChart();
+            }
+        }
+
+        function toggleModal(id) {
+            const modal = document.getElementById(id);
+            if (modal) {
+                modal.classList.toggle('hidden');
+            }
+        }
+
+        // --- UI Updates ---
+        function updateGreeting() {
+            const hour = new Date().getHours();
+            let greetingText = '';
+            if (hour >= 5 && hour < 12) {
+                greetingText = i18n[currentLang].greeting.replace('早安', '早安');
+            } else if (hour >= 12 && hour < 18) {
+                greetingText = i18n[currentLang].greeting.replace('早安', '午安');
+            } else {
+                greetingText = i18n[currentLang].greeting.replace('早安', '晚安');
+            }
+            
+            // Handle EN and JA greetings
+            if (currentLang === 'en') {
+                if (hour >= 5 && hour < 12) greetingText = 'Good morning, ';
+                else if (hour >= 12 && hour < 18) greetingText = 'Good afternoon, ';
+                else greetingText = 'Good evening, ';
+            } else if (currentLang === 'ja') {
+                if (hour >= 5 && hour < 12) greetingText = 'おはよう、';
+                else if (hour >= 12 && hour < 18) greetingText = 'こんにちは、';
+                else greetingText = 'こんばんは、';
+            }
+
+            document.getElementById('user-greeting').innerText = `${greetingText}${userName}！`;
+            document.getElementById('user-name-input').value = userName;
+        }
+
+        function updateHealthScore() {
+            const scoreEl = document.getElementById('avg-health-score');
+            const msgEl = document.getElementById('health-score-message');
+            if (!scoreEl || !msgEl) return;
+
+            if (pets.length === 0) {
+                scoreEl.innerText = "--";
+                msgEl.innerText = "✨ 快來加入毛孩並記錄健康狀況吧！";
+                return;
+            }
+
+            // 初始化基礎分數為 60 分 (有寵物但沒紀錄的基本分)
+            let score = 60;
+            
+            // 1. 未完成事項扣分 (每項 -10)
+            const pendingTasks = globalTasks.filter(t => !t.completed).length;
+            score -= (pendingTasks * 10);
+
+            // 2. 寵物紀錄完整度獎勵
+            pets.forEach(p => {
+                // 每有一筆醫療紀錄 +10
+                if (p.medicalRecords && p.medicalRecords.length > 0) score += 15;
+                // 每有一筆體重紀錄 +10
+                if (p.weightHistory && p.weightHistory.length > 0) score += 15;
+                // 每有一筆藥品提醒 +5
+                if (p.medications && p.medications.length > 0) score += 10;
+            });
+
+            // 確保分數在 0-100 之間
+            score = Math.max(0, Math.min(100, score));
+            scoreEl.innerText = score;
+
+            // 根據分數顯示不同訊息
+            if (score >= 90) {
+                msgEl.innerText = "✨ 毛孩們健康狀況優良！繼續保持。";
+            } else if (score >= 70) {
+                msgEl.innerText = "⭐ 表現不錯，別忘了完成今日的提醒喔！";
+            } else if (score >= 40) {
+                msgEl.innerText = "⚠️ 記得定期幫毛孩做健康紀錄。";
+            } else {
+                msgEl.innerText = "🩺 建議多花點時間記錄毛孩的狀況。";
+            }
+        }
+
+        function updateLanguageUI() {
+            const t = i18n[currentLang];
+            document.getElementById('sub-greeting').innerText = t.subGreeting;
+            document.getElementById('label-avg-score').innerText = t.greeting === 'Hi, ' ? 'Avg. Health Score' : '今日平均健康分數';
+            document.getElementById('label-my-pets').innerText = t.myPets;
+            document.getElementById('btn-add-pet-label').innerText = t.addPet;
+            document.getElementById('label-reminders').innerText = t.reminders;
+            document.getElementById('btn-add-task-label').innerText = t.addReminder;
+            document.getElementById('label-expenses').innerText = t.expenses;
+            document.getElementById('btn-add-expense-label').innerText = t.addExpense;
+            document.getElementById('label-settings-title').innerText = t.settings;
+            document.getElementById('label-sys-settings').innerText = t.sysSettings;
+            document.getElementById('label-dark-mode').innerText = t.darkMode;
+            document.getElementById('label-lang').innerText = t.lang;
+            document.getElementById('label-expense-analysis').innerText = t.analysis;
+            document.getElementById('label-backup').innerText = t.backup;
+            document.getElementById('btn-export').innerText = t.export;
+            document.getElementById('lang-select').value = currentLang;
+        }
+
+        function toggleDarkMode() {
+            isDarkMode = !isDarkMode;
+            saveAll();
+        }
+
+        function applyDarkMode() {
+            if (isDarkMode) {
+                document.body.classList.add('dark-mode');
+                document.getElementById('dark-mode-dot').classList.add('translate-x-6');
+                document.getElementById('dark-mode-toggle').classList.replace('bg-gray-200', 'bg-yellow-400');
+            } else {
+                document.body.classList.remove('dark-mode');
+                document.getElementById('dark-mode-dot').classList.remove('translate-x-6');
+                document.getElementById('dark-mode-toggle').classList.replace('bg-yellow-400', 'bg-gray-200');
+            }
+        }
+
+        function changeLanguage(lang) {
+            currentLang = lang;
+            saveAll();
+        }
+
+        // --- Data Handlers ---
+        function handleAddPet(e) {
+            e.preventDefault();
+            const pet = { id: Date.now(), name: document.getElementById('pet-name').value, type: document.getElementById('pet-type').value, weightHistory: [], medicalRecords: [], medications: [], photo: null };
+            const file = document.getElementById('pet-photo').files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (ev) => { pet.photo = ev.target.result; pets.push(pet); saveAll(); toggleModal('add-pet-modal'); e.target.reset(); };
+                reader.readAsDataURL(file);
+            } else {
+                pets.push(pet); saveAll(); toggleModal('add-pet-modal'); e.target.reset();
+            }
+        }
+
+        function handleAddTask(e) {
+            e.preventDefault();
+            globalTasks.push({ id: Date.now(), title: document.getElementById('task-title').value, time: document.getElementById('task-time').value, completed: false });
+            saveAll(); toggleModal('add-task-modal'); e.target.reset();
+        }
+
+        function handleAddExpense(e) {
+            e.preventDefault();
+            expenses.push({ id: Date.now(), category: document.getElementById('expense-category').value, amount: parseFloat(document.getElementById('expense-amount').value), date: document.getElementById('expense-date').value });
+            saveAll(); toggleModal('add-expense-modal'); e.target.reset();
+        }
+
+        function handleAddWeight(e) {
+            e.preventDefault();
+            const weight = parseFloat(document.getElementById('weight-input').value);
+            const pet = pets.find(p => String(p.id) === String(selectedPetId));
+            pet.weightHistory.push({ date: new Date().toLocaleDateString(), weight });
+            pet.weight = weight;
+            saveAll(); toggleModal('add-weight-modal'); e.target.reset();
+        }
+
+        function handleAddMedical(e) {
+            e.preventDefault();
+            const pet = pets.find(p => String(p.id) === String(selectedPetId));
+            pet.medicalRecords.push({ id: Date.now(), date: new Date().toLocaleDateString(), type: document.getElementById('medical-type').value, note: document.getElementById('medical-note').value, mood: document.getElementById('medical-mood').value });
+            saveAll(); toggleModal('add-medical-modal'); e.target.reset();
+        }
+
+        function handleAddMedication(e) {
+            e.preventDefault();
+            const pet = pets.find(p => String(p.id) === String(selectedPetId));
+            if (!pet.medications) pet.medications = [];
+            
+            let medName = document.getElementById('med-name-select').value;
+            if (medName === '其他') {
+                medName = document.getElementById('med-name-custom').value || '未命名藥品';
+            }
+
+            const med = {
+                id: Date.now(),
+                name: medName,
+                dose: document.getElementById('med-dose').value,
+                time: document.getElementById('med-time').value,
+                lastTaken: null
+            };
+            pet.medications.push(med);
+            // 同步加入全局提醒
+            globalTasks.push({ id: med.id, title: `餵藥: ${pet.name} - ${med.name} (${med.dose})`, time: med.time, completed: false });
+            saveAll(); toggleModal('add-medication-modal'); e.target.reset();
+            document.getElementById('med-name-custom-container').classList.add('hidden');
+        }
+
+        function handleMedSelectChange(val) {
+            const customContainer = document.getElementById('med-name-custom-container');
+            const doseInput = document.getElementById('med-dose');
+            
+            if (val === '其他') {
+                customContainer.classList.remove('hidden');
+                document.getElementById('med-name-custom').focus();
+            } else {
+                customContainer.classList.add('hidden');
+            }
+
+            // 自動填入建議劑量
+            const doses = {
+                '心絲蟲藥': '1 顆',
+                '全能狗/一錠除': '1 顆',
+                '益生菌': '1 包/顆',
+                '魚油': '1 顆',
+                '關節保健': '1 匙/顆'
+            };
+            if (doses[val]) {
+                doseInput.value = doses[val];
+            } else {
+                doseInput.value = '';
+            }
+        }
+
+        function takeMedication(medId) {
+            const pet = pets.find(p => String(p.id) === String(selectedPetId));
+            const med = pet.medications.find(m => String(m.id) === String(medId));
+            med.lastTaken = new Date().toLocaleString();
+            // 同步完成首頁提醒
+            const task = globalTasks.find(t => String(t.id) === String(medId));
+            if (task) task.completed = true;
+            saveAll();
+        }
+
+        function deleteMedication(medId) {
+            const pet = pets.find(p => String(p.id) === String(selectedPetId));
+            pet.medications = pet.medications.filter(m => String(m.id) !== String(medId));
+            globalTasks = globalTasks.filter(t => String(t.id) !== String(medId));
+            saveAll();
+        }
+
+        function deletePet(id) { if(confirm('確定刪除？')){ pets = pets.filter(p=>String(p.id)!==String(id)); if(String(selectedPetId)===String(id))selectedPetId=null; saveAll(); } }
+        function deleteTask(id) { globalTasks = globalTasks.filter(t=>String(t.id)!==String(id)); saveAll(); }
+        function toggleTask(id) { const t=globalTasks.find(x=>String(x.id)===String(id)); t.completed=!t.completed; saveAll(); }
+        function saveUserName() { userName = document.getElementById('user-name-input').value || '主人'; saveAll(); alert('已儲存！'); }
+
+        // --- Birthday Functions ---
+        function renderBirthdayCard() {
+            const today = new Date();
+            const todayMonth = today.getMonth() + 1;
+            const todayDate = today.getDate();
+            const container = document.getElementById('birthday-card-container');
+            container.innerHTML = ''; // Clear previous cards
+
+            const birthdayPets = pets.filter(p => {
+                if (!p.birthday) return false;
+                const birthDate = new Date(p.birthday);
+                return birthDate.getMonth() + 1 === todayMonth && birthDate.getDate() === todayDate;
+            });
+
+            if (birthdayPets.length > 0) {
+                const petNames = birthdayPets.map(p => p.name).join(', ');
+                container.innerHTML = `
+                    <div class="bg-gradient-to-r from-pink-400 to-red-400 rounded-3xl p-6 text-white shadow-lg text-center mb-6">
+                        <div class="text-4xl mb-2">🎉🎂</div>
+                        <h3 class="text-2xl font-bold">生日快樂！</h3>
+                        <p class="mt-2">今天是 <b class="font-bold">${petNames}</b> 的大日子，別忘了給牠一個特別的罐罐！</p>
+                    </div>
+                `;
+            }
+        }
+
+        // --- Rendering ---
+        function renderPets() {
+            const list = document.getElementById('pet-list');
+            if (pets.length === 0) { list.innerHTML = `<div class="p-8 text-center text-gray-400 border-2 border-dashed rounded-3xl">尚未加入毛孩</div>`; return; }
+            list.innerHTML = pets.map(p => `
+                <div onclick="selectPet('${p.id}')" class="bg-white p-4 rounded-3xl flex items-center space-x-4 shadow-sm border ${String(selectedPetId)===String(p.id)?'border-yellow-400':'border-gray-50'} pet-card relative">
+                    <div class="w-14 h-14 bg-orange-100 rounded-2xl flex items-center justify-center text-xl overflow-hidden">
+                        ${p.photo ? `<img src="${p.photo}" class="w-full h-full object-cover">` : (p.type==='狗'?'🐶':'🐱')}
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="font-bold">${p.name}</h3>
+                        <p class="text-xs text-gray-400">${p.type} - ${p.breed || '品種未填'} • ${p.weight||'--'} kg</p>
+                    </div>
+                    <div onclick="event.stopPropagation(); deletePet('${p.id}')" class="w-10 h-10 flex items-center justify-center text-gray-300 hover:text-red-400 cursor-pointer">
+                        <i class="fas fa-trash"></i>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderTasks() {
+            const list = document.getElementById('task-list');
+            list.innerHTML = globalTasks.map(t => `
+                <div class="bg-white p-4 rounded-2xl flex items-center space-x-4 shadow-sm border ${t.completed?'opacity-50':''}">
+                    <div onclick="toggleTask(${t.id})" class="w-6 h-6 rounded-full border-2 border-yellow-400 flex items-center justify-center">
+                        ${t.completed?'<i class="fas fa-check text-yellow-400 text-xs"></i>':''}
+                    </div>
+                    <div class="flex-1">
+                        <h4 class="font-bold text-sm ${t.completed?'line-through':''}">${t.title}</h4>
+                        <p class="text-xs text-gray-400">${t.time}</p>
+                    </div>
+                    <button onclick="deleteTask(${t.id})" class="text-gray-300"><i class="fas fa-trash"></i></button>
+                </div>
+            `).join('');
+        }
+
+        function renderExpenses() {
+            const list = document.getElementById('expense-list');
+            list.innerHTML = expenses.slice(-3).reverse().map(e => `
+                <div class="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm border border-gray-50">
+                    <div class="flex items-center space-x-3">
+                        <div class="bg-blue-50 p-2 rounded-lg text-blue-500"><i class="fas fa-receipt"></i></div>
+                        <div><h4 class="font-bold text-sm">${e.category}</h4><p class="text-[10px] text-gray-400">${e.date}</p></div>
+                    </div>
+                    <span class="font-bold">$${e.amount}</span>
+                </div>
+            `).join('');
+        }
+
+        function renderMedications() {
+            const p = pets.find(x=>String(x.id)===String(selectedPetId));
+            const list = document.getElementById('medication-list');
+            if(!p || !p.medications || !p.medications.length) { list.innerHTML = `<p class="text-center text-gray-400 py-4">尚未加入藥品</p>`; return; }
+            list.innerHTML = p.medications.map(m => `
+                <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex justify-between items-center">
+                    <div class="flex-1">
+                        <div class="flex items-center space-x-2">
+                            <span class="bg-orange-100 text-orange-600 text-[10px] px-2 py-0.5 rounded-full font-bold">藥品</span>
+                            <h4 class="font-bold text-sm">${m.name}</h4>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-1">劑量: ${m.dose} • 提醒: ${m.time}</p>
+                        ${m.lastTaken ? `<p class="text-[10px] text-green-500 mt-1"><i class="fas fa-check-circle mr-1"></i>上次餵食: ${m.lastTaken}</p>` : ''}
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="takeMedication('${m.id}')" class="bg-yellow-400 text-white text-xs font-bold px-3 py-2 rounded-lg shadow-sm">打卡</button>
+                        <button onclick="deleteMedication('${m.id}')" class="text-gray-300 hover:text-red-400 p-2"><i class="fas fa-trash-alt"></i></button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderMedicalRecords() {
+            const p = pets.find(x=>String(x.id)===String(selectedPetId));
+            const list = document.getElementById('medical-list');
+            if(!p || !p.medicalRecords.length) { list.innerHTML = `<p class="text-center text-gray-400 py-4">無紀錄</p>`; return; }
+            list.innerHTML = p.medicalRecords.map(m => `
+                <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                    <div class="flex justify-between text-[10px] font-bold">
+                        <span class="text-green-600">${m.type}</span><span class="text-gray-400">${m.date}</span>
+                    </div>
+                    <p class="mt-2 text-sm">${m.note}</p>
+                    <p class="mt-1 text-[10px] text-gray-400">心情: ${m.mood}</p>
+                </div>
+            `).join('');
+        }
+
+        // --- Charts ---
+        function updateWeightChart() {
+            const p = pets.find(x=>String(x.id)===String(selectedPetId));
+            if(!p) return;
+            const ctx = document.getElementById('weightChart').getContext('2d');
+            if(weightChart) weightChart.destroy();
+            weightChart = new Chart(ctx, {
+                type: 'line',
+                data: { labels: p.weightHistory.map(h=>h.date), datasets: [{ data: p.weightHistory.map(h=>h.weight), borderColor: '#FFD700', tension: 0.4, fill: true, backgroundColor: 'rgba(255,215,0,0.1)' }] },
+                options: { responsive: true, plugins: { legend: { display: false } } }
+            });
+        }
+
+        function updateExpenseChart() {
+            // Guard clause: Only run if the chart canvases exist (i.e., settings view is active)
+            if (!document.getElementById('expensePieChart') || !document.getElementById('expenseBarChart')) {
+                return;
+            }
+
+            // --- Part 1: Pie Chart (Doughnut) ---
+            const pieCtx = document.getElementById('expensePieChart').getContext('2d');
+            const cats = ['飼料', '醫療', '美容', '玩具', '其他'];
+            const pieData = cats.map(c => expenses.filter(e => e.category === c).reduce((s, x) => s + x.amount, 0));
+            const total = pieData.reduce((s, v) => s + v, 0);
+            
+            document.getElementById('expense-summary').innerHTML = `<p class="text-sm text-gray-500">總支出</p><p class="text-2xl font-bold">$${total}</p>`;
+            
+            if (expensePieChart) expensePieChart.destroy();
+            expensePieChart = new Chart(pieCtx, {
+                type: 'doughnut',
+                data: { labels: cats, datasets: [{ data: pieData, backgroundColor: ['#FFD700', '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0'] }] },
+                options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } } }
+            });
+
+            // --- Part 2: Bar Chart (Monthly Trend) ---
+            const barCtx = document.getElementById('expenseBarChart').getContext('2d');
+            const monthlyData = { labels: [], data: [] };
+            const today = new Date();
+            for (let i = 5; i >= 0; i--) {
+                const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+                const monthLabel = `${d.getFullYear()}/${d.getMonth() + 1}`;
+                monthlyData.labels.push(monthLabel);
+
+                const monthExpenses = expenses.filter(e => {
+                    if (!e.date) return false;
+                    const expenseDate = new Date(e.date);
+                    return expenseDate.getFullYear() === d.getFullYear() && expenseDate.getMonth() === d.getMonth();
+                });
+                const monthTotal = monthExpenses.reduce((sum, e) => sum + e.amount, 0);
+                monthlyData.data.push(monthTotal);
+            }
+
+            if (expenseBarChart) expenseBarChart.destroy();
+            expenseBarChart = new Chart(barCtx, {
+                type: 'bar',
+                data: {
+                    labels: monthlyData.labels,
+                    datasets: [{
+                        label: '月總支出',
+                        data: monthlyData.data,
+                        backgroundColor: 'rgba(255, 206, 86, 0.5)',
+                        borderColor: 'rgba(255, 206, 86, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        // --- Logic ---
+        function selectPet(id) {
+            selectedPetId = id;
+            const pet = pets.find(x=>String(x.id)===String(id));
+            if(pet) document.getElementById('health-pet-name').innerText = pet.name + ' 的健康詳情';
+            showView('health');
+            renderAll();
+        }
+
+        function runAIAnalysis() {
+            const p = pets.find(x=>String(x.id)===String(selectedPetId));
+            if (!p) return;
+
+            toggleModal('ai-analysis-modal');
+            const content = document.getElementById('ai-content');
+            content.innerHTML = `<div class="text-center"><i class="fas fa-spinner fa-spin text-3xl text-purple-500"></i><p class="mt-2">AI 智慧分析中...</p></div>`;
+
+            setTimeout(() => {
+                let res = `<h4><b>${p.name}</b> 的分析結果：</h4>`;
+                
+                // 強化體重分析邏輯
+                if (p.weightHistory.length < 3) {
+                    res += `<p>⚠️ 體重數據不足 (少於3筆)，建議持續記錄以獲得更精準的分析。</p>`;
+                } else {
+                    const lastThree = p.weightHistory.slice(-3);
+                    const w1 = lastThree[0].weight;
+                    const w2 = lastThree[1].weight;
+                    const w3 = lastThree[2].weight;
+
+                    if (w3 > w2 && w2 > w1) {
+                        res += `<p>📈 <b class="text-orange-500">注意：體重連續上升。</b> 請留意毛孩的飲食份量，避免過度肥胖。如果食量正常但體重持續增加，建議諮詢獸醫。</p>`;
+                    } else if (w3 < w2 && w2 < w1) {
+                        res += `<p>📉 <b class="text-blue-500">注意：體重連續下降。</b> 請確認毛孩的食慾與精神狀況，若無故持續消瘦，請務必諮詢獸醫檢查。</p>`;
+                    } else {
+                        res += `<p>✅ 體重趨勢穩定，目前看來很健康，請繼續保持！</p>`;
+                    }
+                }
+
+                // 醫療紀錄分析
+                if (p.medicalRecords.length === 0) {
+                    res += `<p>💡 尚未建立任何醫療紀錄，建議將疫苗、驅蟲等資訊建檔，方便追蹤。`;
+                } else {
+                    const lastRecord = p.medicalRecords[p.medicalRecords.length - 1];
+                    res += `<p>💡 最近一筆醫療紀錄為「${lastRecord.type}」，請記得按時回診或追蹤。`;
+                }
+
+                content.innerHTML = res;
+            }, 1500);
+        }
+
+        function exportData() {
+            const blob = new Blob([JSON.stringify({pets, globalTasks, expenses, userName})], {type:'application/json'});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'backup.json'; a.click();
+        }
+
+        function importData(e) {
+            const reader = new FileReader();
+            reader.onload = (ev) => { const d = JSON.parse(ev.target.result); pets=d.pets; globalTasks=d.globalTasks; expenses=d.expenses; userName=d.userName; saveAll(); alert('成功！'); };
+            reader.readAsText(e.target.files[0]);
+        }
+
+        // --- Background Functions ---
+        function handleBgUpload(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const bgData = ev.target.result;
+                    localStorage.setItem('customBg', bgData);
+                    applyCustomBg(bgData);
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function applyCustomBg(data) {
+            if (data) {
+                document.body.style.setProperty('--bg-image', `url(${data})`);
+            } else {
+                document.body.style.removeProperty('--bg-image');
+            }
+        }
+
+        function resetBg() {
+            localStorage.removeItem('customBg');
+            applyCustomBg(null);
+            alert('已恢復預設背景！');
+        }
+
+        // --- Init ---
+        const savedBg = localStorage.getItem('customBg');
+        if (savedBg) applyCustomBg(savedBg);
+        renderAll();
+    </script>
+</body>
+</html>
