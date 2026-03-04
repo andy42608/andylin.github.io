@@ -109,6 +109,15 @@
             50% { transform: translateY(-20px) rotate(5deg); }
         }
 
+        .score-card-animate {
+            animation: cardGlow 3s ease-in-out infinite alternate;
+        }
+
+        @keyframes cardGlow {
+            from { box-shadow: 0 4px 15px rgba(251, 191, 36, 0.3); }
+            to { box-shadow: 0 4px 25px rgba(251, 191, 36, 0.6); }
+        }
+
         .dark-mode .floating-pet {
             opacity: 0.05;
             filter: grayscale(1) brightness(1.5);
@@ -142,7 +151,7 @@
             <div id="birthday-card-container"></div>
 
             <!-- Health Score Card -->
-            <div class="bg-gradient-to-br from-yellow-300 to-orange-400 rounded-3xl p-6 text-white shadow-lg">
+            <div class="bg-gradient-to-br from-yellow-300 to-orange-400 rounded-3xl p-6 text-white shadow-lg score-card-animate">
                 <div class="flex justify-between items-start">
                     <div>
                         <span id="label-avg-score" class="text-sm opacity-80">今日平均健康分數</span>
@@ -150,7 +159,10 @@
                     </div>
                     <div class="bg-white/20 p-2 rounded-xl backdrop-blur-md"><i class="fas fa-chart-line"></i></div>
                 </div>
-                <p id="health-score-message" class="mt-4 text-sm font-medium">✨ 快來加入毛孩並記錄健康狀況吧！</p>
+                <div class="flex items-center justify-between mt-4">
+                    <p id="health-score-message" class="text-sm font-medium">✨ 快來加入毛孩並記錄健康狀況吧！</p>
+                    <span id="last-update-time" class="text-[9px] opacity-60"></span>
+                </div>
             </div>
 
             <!-- Pet List -->
@@ -189,11 +201,20 @@
             <div class="bg-white p-4 rounded-3xl shadow-sm border border-gray-100">
                 <h3 class="font-bold text-gray-800 mb-4">體重趨勢</h3>
                 <canvas id="weightChart"></canvas>
+                <div id="weight-list-container" class="mt-4 px-2 space-y-1"></div>
                 <div class="flex space-x-2 mt-4">
                     <button onclick="toggleModal('add-weight-modal')" class="flex-1 bg-yellow-400 text-white font-bold py-3 rounded-xl shadow-sm">紀錄體重</button>
                     <button onclick="runAIAnalysis()" class="flex-1 bg-gradient-to-r from-purple-500 to-indigo-600 text-white font-bold py-3 rounded-xl shadow-sm">AI 健康分析</button>
                 </div>
             </div>
+
+            <section>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold text-gray-800">每日飲水</h2>
+                    <button onclick="addWaterIntake()" class="text-blue-500 text-sm font-bold">+ 紀錄喝水</button>
+                </div>
+                <div id="water-intake-list" class="space-y-3"></div>
+            </section>
 
             <section>
                 <div class="flex justify-between items-center mb-4">
@@ -258,6 +279,12 @@
                         <span class="text-sm font-medium" id="label-dark-mode">暗黑模式</span>
                         <button onclick="toggleDarkMode()" id="dark-mode-toggle" class="w-12 h-6 bg-gray-200 rounded-full relative transition-colors">
                             <div id="dark-mode-dot" class="w-5 h-5 bg-white rounded-full absolute left-0.5 top-0.5 shadow-sm transition-transform"></div>
+                        </button>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm font-medium">提醒通知</span>
+                        <button onclick="requestNotificationPermission()" id="notification-toggle" class="w-12 h-6 bg-gray-200 rounded-full relative transition-colors">
+                            <div id="notification-dot" class="w-5 h-5 bg-white rounded-full absolute left-0.5 top-0.5 shadow-sm transition-transform"></div>
                         </button>
                     </div>
                     <div class="space-y-2">
@@ -342,11 +369,22 @@
                 </div>
                 <form onsubmit="handleAddPet(event)" class="space-y-4">
                     <input type="text" id="pet-name" placeholder="毛孩姓名" required class="w-full bg-gray-50 rounded-xl p-3 border-none">
-                    <select id="pet-type" class="w-full bg-gray-50 rounded-xl p-3 border-none">
-                        <option value="狗">狗狗 🐶</option>
-                        <option value="貓">貓咪 🐱</option>
-                        <option value="其他">其他 🐹</option>
-                    </select>
+                    <div class="grid grid-cols-2 gap-2">
+                        <select id="pet-type" class="w-full bg-gray-50 rounded-xl p-3 border-none">
+                            <option value="狗">狗狗 🐶</option>
+                            <option value="貓">貓咪 🐱</option>
+                            <option value="其他">其他 🐹</option>
+                        </select>
+                        <input type="text" id="pet-breed" placeholder="品種" class="w-full bg-gray-50 rounded-xl p-3 border-none">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[10px] text-gray-400 ml-1">生日</label>
+                        <input type="date" id="pet-birthday" class="w-full bg-gray-50 rounded-xl p-3 border-none">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[10px] text-gray-400 ml-1">每日飲水目標 (ml)</label>
+                        <input type="number" id="pet-water-goal" placeholder="例如: 500" class="w-full bg-gray-50 rounded-xl p-3 border-none">
+                    </div>
                     <input type="file" id="pet-photo" accept="image/*" class="w-full text-sm">
                     <button type="submit" class="w-full bg-yellow-400 text-white font-bold py-4 rounded-xl shadow-md">完成建立</button>
                 </form>
@@ -362,7 +400,15 @@
                 </div>
                 <form onsubmit="handleAddTask(event)" class="space-y-4">
                     <input type="text" id="task-title" placeholder="提醒內容" required class="w-full bg-gray-50 rounded-xl p-3 border-none">
-                    <input type="text" id="task-time" placeholder="時間 (如：18:00)" required class="w-full bg-gray-50 rounded-xl p-3 border-none">
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="text" id="task-time" placeholder="時間 (如：18:00)" required class="w-full bg-gray-50 rounded-xl p-3 border-none">
+                        <select id="task-repeat" class="w-full bg-gray-50 rounded-xl p-3 border-none">
+                            <option value="none">不重複</option>
+                            <option value="daily">每天</option>
+                            <option value="weekly">每週</option>
+                            <option value="monthly">每月</option>
+                        </select>
+                    </div>
                     <button type="submit" class="w-full bg-yellow-400 text-white font-bold py-4 rounded-xl">儲存提醒</button>
                 </form>
             </div>
@@ -574,6 +620,8 @@
             if (view === 'health') {
                 renderMedications();
                 renderMedicalRecords();
+                renderWaterIntake();
+                renderWeightList();
                 updateWeightChart();
             }
         }
@@ -623,36 +671,49 @@
                 return;
             }
 
-            // 初始化基礎分數為 60 分 (有寵物但沒紀錄的基本分)
+            // 初始化基礎分數為 60 分
             let score = 60;
+            const now = new Date();
             
             // 1. 未完成事項扣分 (每項 -10)
             const pendingTasks = globalTasks.filter(t => !t.completed).length;
             score -= (pendingTasks * 10);
 
-            // 2. 寵物紀錄完整度獎勵
+            // 2. 寵物紀錄完整度與時效性獎勵
             pets.forEach(p => {
-                // 每有一筆醫療紀錄 +10
-                if (p.medicalRecords && p.medicalRecords.length > 0) score += 15;
-                // 每有一筆體重紀錄 +10
-                if (p.weightHistory && p.weightHistory.length > 0) score += 15;
-                // 每有一筆藥品提醒 +5
-                if (p.medications && p.medications.length > 0) score += 10;
+                // 體重時效性 (14天內有紀錄 +15)
+                if (p.weightHistory && p.weightHistory.length > 0) {
+                    const lastWeight = new Date(p.weightHistory[p.weightHistory.length-1].date);
+                    const daysSinceWeight = (now - lastWeight) / (1000 * 60 * 60 * 24);
+                    if (daysSinceWeight <= 14) score += 15;
+                    else if (daysSinceWeight <= 30) score += 5;
+                }
+
+                // 飲水時效性 (1天內有紀錄 +15)
+                if (p.waterIntake && p.waterIntake.length > 0) {
+                    const lastWater = new Date(p.waterIntake[p.waterIntake.length-1].date);
+                    const daysSinceWater = (now - lastWater) / (1000 * 60 * 60 * 24);
+                    if (daysSinceWater <= 1.5) score += 15;
+                }
+
+                // 醫療紀錄 (有紀錄就 +10)
+                if (p.medicalRecords && p.medicalRecords.length > 0) score += 10;
             });
 
             // 確保分數在 0-100 之間
             score = Math.max(0, Math.min(100, score));
-            scoreEl.innerText = score;
+            scoreEl.innerText = Math.round(score);
+            document.getElementById('last-update-time').innerText = `最後更新: ${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
 
             // 根據分數顯示不同訊息
             if (score >= 90) {
                 msgEl.innerText = "✨ 毛孩們健康狀況優良！繼續保持。";
             } else if (score >= 70) {
-                msgEl.innerText = "⭐ 表現不錯，別忘了完成今日的提醒喔！";
+                msgEl.innerText = "⭐ 表現不錯，別忘了定期更新健康紀錄喔！";
             } else if (score >= 40) {
-                msgEl.innerText = "⚠️ 記得定期幫毛孩做健康紀錄。";
+                msgEl.innerText = "⚠️ 提醒：有些紀錄太久沒更新了。";
             } else {
-                msgEl.innerText = "🩺 建議多花點時間記錄毛孩的狀況。";
+                msgEl.innerText = "🩺 警告：毛孩健康數據不足或提醒未完成！";
             }
         }
 
@@ -691,6 +752,35 @@
                 document.getElementById('dark-mode-dot').classList.remove('translate-x-6');
                 document.getElementById('dark-mode-toggle').classList.replace('bg-yellow-400', 'bg-gray-200');
             }
+            updateNotificationToggleUI();
+        }
+
+        function requestNotificationPermission() {
+            if (!('Notification' in window)) {
+                alert('您的瀏覽器不支援通知功能。');
+                return;
+            }
+            Notification.requestPermission().then(permission => {
+                if (permission === 'granted') {
+                    notificationsEnabled = true;
+                    new Notification('測試通知', { body: '您已成功啟用提醒通知！' });
+                } else {
+                    notificationsEnabled = false;
+                }
+                saveAll();
+            });
+        }
+
+        function updateNotificationToggleUI() {
+            const toggle = document.getElementById('notification-toggle');
+            const dot = document.getElementById('notification-dot');
+            if (notificationsEnabled) {
+                toggle.classList.replace('bg-gray-200', 'bg-green-400');
+                dot.classList.add('translate-x-6');
+            } else {
+                toggle.classList.replace('bg-green-400', 'bg-gray-200');
+                dot.classList.remove('translate-x-6');
+            }
         }
 
         function changeLanguage(lang) {
@@ -701,7 +791,19 @@
         // --- Data Handlers ---
         function handleAddPet(e) {
             e.preventDefault();
-            const pet = { id: Date.now(), name: document.getElementById('pet-name').value, type: document.getElementById('pet-type').value, weightHistory: [], medicalRecords: [], medications: [], photo: null };
+            const pet = { 
+                id: Date.now(), 
+                name: document.getElementById('pet-name').value, 
+                type: document.getElementById('pet-type').value, 
+                breed: document.getElementById('pet-breed').value,
+                birthday: document.getElementById('pet-birthday').value,
+                waterGoal: parseInt(document.getElementById('pet-water-goal').value) || null,
+                weightHistory: [], 
+                medicalRecords: [], 
+                medications: [], 
+                waterIntake: [], 
+                photo: null 
+            };
             const file = document.getElementById('pet-photo').files[0];
             if (file) {
                 const reader = new FileReader();
@@ -714,7 +816,14 @@
 
         function handleAddTask(e) {
             e.preventDefault();
-            globalTasks.push({ id: Date.now(), title: document.getElementById('task-title').value, time: document.getElementById('task-time').value, completed: false });
+            const task = { 
+                id: Date.now(), 
+                title: document.getElementById('task-title').value, 
+                time: document.getElementById('task-time').value, 
+                repeat: document.getElementById('task-repeat').value,
+                completed: false 
+            };
+            globalTasks.push(task);
             saveAll(); toggleModal('add-task-modal'); e.target.reset();
         }
 
@@ -728,16 +837,23 @@
             e.preventDefault();
             const weight = parseFloat(document.getElementById('weight-input').value);
             const pet = pets.find(p => String(p.id) === String(selectedPetId));
-            pet.weightHistory.push({ date: new Date().toLocaleDateString(), weight });
+            pet.weightHistory.push({ id: Date.now(), date: new Date().toLocaleDateString(), weight });
             pet.weight = weight;
-            saveAll(); toggleModal('add-weight-modal'); e.target.reset();
+            saveAll(); 
+            updateWeightChart(); // Refresh chart
+            renderWeightList(); // Refresh list
+            toggleModal('add-weight-modal'); 
+            e.target.reset();
         }
 
         function handleAddMedical(e) {
             e.preventDefault();
             const pet = pets.find(p => String(p.id) === String(selectedPetId));
             pet.medicalRecords.push({ id: Date.now(), date: new Date().toLocaleDateString(), type: document.getElementById('medical-type').value, note: document.getElementById('medical-note').value, mood: document.getElementById('medical-mood').value });
-            saveAll(); toggleModal('add-medical-modal'); e.target.reset();
+            saveAll(); 
+            renderMedicalRecords(); // Refresh list
+            toggleModal('add-medical-modal'); 
+            e.target.reset();
         }
 
         function handleAddMedication(e) {
@@ -759,8 +875,11 @@
             };
             pet.medications.push(med);
             // 同步加入全局提醒
-            globalTasks.push({ id: med.id, title: `餵藥: ${pet.name} - ${med.name} (${med.dose})`, time: med.time, completed: false });
-            saveAll(); toggleModal('add-medication-modal'); e.target.reset();
+            globalTasks.push({ id: med.id, title: `餵藥: ${pet.name} - ${med.name} (${med.dose})`, time: med.time, repeat: 'daily', completed: false });
+            saveAll(); 
+            renderMedications(); // Refresh list
+            toggleModal('add-medication-modal'); 
+            e.target.reset();
             document.getElementById('med-name-custom-container').classList.add('hidden');
         }
 
@@ -809,8 +928,84 @@
 
         function deletePet(id) { if(confirm('確定刪除？')){ pets = pets.filter(p=>String(p.id)!==String(id)); if(String(selectedPetId)===String(id))selectedPetId=null; saveAll(); } }
         function deleteTask(id) { globalTasks = globalTasks.filter(t=>String(t.id)!==String(id)); saveAll(); }
-        function toggleTask(id) { const t=globalTasks.find(x=>String(x.id)===String(id)); t.completed=!t.completed; saveAll(); }
+        
+        function deleteWaterIntake(id) {
+            const pet = pets.find(p => String(p.id) === String(selectedPetId));
+            if (pet) {
+                pet.waterIntake = pet.waterIntake.filter(w => String(w.id) !== String(id));
+                saveAll();
+                renderWaterIntake();
+            }
+        }
+
+        function deleteWeightRecord(id) {
+            const pet = pets.find(p => String(p.id) === String(selectedPetId));
+            if (pet) {
+                pet.weightHistory = pet.weightHistory.filter(w => String(w.id) !== String(id));
+                // Update the current weight if the deleted one was the latest
+                if (pet.weightHistory.length > 0) {
+                    pet.weight = pet.weightHistory[pet.weightHistory.length - 1].weight;
+                } else {
+                    pet.weight = null;
+                }
+                saveAll();
+                updateWeightChart();
+                renderWeightList();
+            }
+        }
+
+        function deleteMedicalRecord(id) {
+            const pet = pets.find(p => String(p.id) === String(selectedPetId));
+            if (pet) {
+                pet.medicalRecords = pet.medicalRecords.filter(m => String(m.id) !== String(id));
+                saveAll();
+                renderMedicalRecords();
+            }
+        }
+
+        function toggleTask(id) { 
+            const t = globalTasks.find(x => String(x.id) === String(id));
+            if (!t) return;
+            
+            t.completed = !t.completed;
+            
+            // Handle recurring tasks: Reset for the next day/week/month
+            if (t.completed && t.repeat && t.repeat !== 'none') {
+                // Instead of creating a new task, we just un-complete it but mark it as done for *today*.
+                // A more robust solution would calculate the next due date.
+                // For now, we'll prevent re-notification by adding a 'lastCompleted' timestamp.
+                t.lastCompleted = new Date().toISOString();
+            }
+            saveAll(); 
+        }
         function saveUserName() { userName = document.getElementById('user-name-input').value || '主人'; saveAll(); alert('已儲存！'); }
+
+        function calculateAge(birthday) {
+            const birthDate = new Date(birthday);
+            const today = new Date();
+            let years = today.getFullYear() - birthDate.getFullYear();
+            let months = today.getMonth() - birthDate.getMonth();
+            if (months < 0 || (months === 0 && today.getDate() < birthDate.getDate())) {
+                years--;
+                months += 12;
+            }
+            if (years === 0) return `${months} 個月`;
+            return `${years} 歲 ${months} 個月`;
+        }
+
+        function addWaterIntake() {
+            const intake = prompt("請輸入今日飲水量 (ml):", "150");
+            if (intake && !isNaN(intake) && intake > 0) {
+                const pet = pets.find(p => String(p.id) === String(selectedPetId));
+                if (pet) {
+                    if (!pet.waterIntake) {
+                        pet.waterIntake = [];
+                    }
+                    pet.waterIntake.push({ id: Date.now(), date: new Date().toLocaleDateString('zh-TW'), amount: parseInt(intake) });
+                    saveAll();
+                }
+            }
+        }
 
         // --- Birthday Functions ---
         function renderBirthdayCard() {
@@ -849,7 +1044,8 @@
                     </div>
                     <div class="flex-1">
                         <h3 class="font-bold">${p.name}</h3>
-                        <p class="text-xs text-gray-400">${p.type} - ${p.breed || '品種未填'} • ${p.weight||'--'} kg</p>
+                        <p class="text-xs text-gray-400">${p.type} - ${p.breed || '品種未填'}</p>
+                        <p class="text-[9px] text-gray-400">${p.weight||'--'} kg • ${p.birthday ? calculateAge(p.birthday) : '年齡未填'}</p>
                     </div>
                     <div onclick="event.stopPropagation(); deletePet('${p.id}')" class="w-10 h-10 flex items-center justify-center text-gray-300 hover:text-red-400 cursor-pointer">
                         <i class="fas fa-trash"></i>
@@ -861,15 +1057,20 @@
         function renderTasks() {
             const list = document.getElementById('task-list');
             list.innerHTML = globalTasks.map(t => `
-                <div class="bg-white p-4 rounded-2xl flex items-center space-x-4 shadow-sm border ${t.completed?'opacity-50':''}">
-                    <div onclick="toggleTask(${t.id})" class="w-6 h-6 rounded-full border-2 border-yellow-400 flex items-center justify-center">
+                <div class="bg-white p-4 rounded-2xl flex items-center space-x-4 shadow-sm border ${t.completed?'opacity-50':''} group">
+                    <div onclick="toggleTask(${t.id})" class="w-6 h-6 rounded-full border-2 border-yellow-400 flex items-center justify-center cursor-pointer">
                         ${t.completed?'<i class="fas fa-check text-yellow-400 text-xs"></i>':''}
                     </div>
                     <div class="flex-1">
                         <h4 class="font-bold text-sm ${t.completed?'line-through':''}">${t.title}</h4>
-                        <p class="text-xs text-gray-400">${t.time}</p>
+                        <div class="flex items-center space-x-2 mt-1">
+                            <p class="text-[10px] text-gray-400">${t.time}</p>
+                            ${t.repeat && t.repeat !== 'none' ? `<span class="bg-blue-50 text-blue-500 text-[9px] px-1.5 py-0.5 rounded-full"><i class="fas fa-redo mr-1"></i>${t.repeat === 'daily' ? '每天' : t.repeat === 'weekly' ? '每週' : '每月'}</span>` : ''}
+                        </div>
                     </div>
-                    <button onclick="deleteTask(${t.id})" class="text-gray-300"><i class="fas fa-trash"></i></button>
+                    <button onclick="deleteTask(${t.id})" class="text-gray-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <i class="fas fa-trash"></i>
+                    </button>
                 </div>
             `).join('');
         }
@@ -877,14 +1078,24 @@
         function renderExpenses() {
             const list = document.getElementById('expense-list');
             list.innerHTML = expenses.slice(-3).reverse().map(e => `
-                <div class="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm border border-gray-50">
+                <div class="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm border border-gray-50 group">
                     <div class="flex items-center space-x-3">
                         <div class="bg-blue-50 p-2 rounded-lg text-blue-500"><i class="fas fa-receipt"></i></div>
                         <div><h4 class="font-bold text-sm">${e.category}</h4><p class="text-[10px] text-gray-400">${e.date}</p></div>
                     </div>
-                    <span class="font-bold">$${e.amount}</span>
+                    <div class="flex items-center space-x-3">
+                        <span class="font-bold">$${e.amount}</span>
+                        <button onclick="deleteExpense('${e.id}')" class="text-gray-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
                 </div>
             `).join('');
+        }
+
+        function deleteExpense(id) {
+            expenses = expenses.filter(e => String(e.id) !== String(id));
+            saveAll();
         }
 
         function renderMedications() {
@@ -914,12 +1125,87 @@
             const list = document.getElementById('medical-list');
             if(!p || !p.medicalRecords.length) { list.innerHTML = `<p class="text-center text-gray-400 py-4">無紀錄</p>`; return; }
             list.innerHTML = p.medicalRecords.map(m => `
-                <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative group">
                     <div class="flex justify-between text-[10px] font-bold">
                         <span class="text-green-600">${m.type}</span><span class="text-gray-400">${m.date}</span>
                     </div>
                     <p class="mt-2 text-sm">${m.note}</p>
                     <p class="mt-1 text-[10px] text-gray-400">心情: ${m.mood}</p>
+                    <button onclick="deleteMedicalRecord('${m.id}')" class="absolute top-4 right-4 text-gray-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function renderWaterIntake() {
+            const pet = pets.find(p => String(p.id) === String(selectedPetId));
+            const list = document.getElementById('water-intake-list');
+            const progressContainer = document.getElementById('water-progress-container');
+            
+            if (!pet) return;
+
+            // Render Progress Bar
+            if (pet.waterGoal && pet.waterGoal > 0) {
+                const today = new Date().toLocaleDateString('zh-TW');
+                const todayIntake = (pet.waterIntake || [])
+                    .filter(w => w.date === today)
+                    .reduce((sum, w) => sum + w.amount, 0);
+                
+                const percentage = Math.min(100, (todayIntake / pet.waterGoal) * 100);
+
+                progressContainer.innerHTML = `
+                    <div class="bg-gray-100 rounded-full h-6 w-full overflow-hidden relative border border-gray-200">
+                        <div class="bg-blue-400 h-full rounded-full transition-all duration-500" style="width: ${percentage}%;"></div>
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <span class="text-xs font-bold text-gray-700">${todayIntake}ml / ${pet.waterGoal}ml</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                progressContainer.innerHTML = ''; // Clear progress bar if no goal is set
+            }
+
+            // Render Intake List
+            if (!pet.waterIntake || pet.waterIntake.length === 0) {
+                list.innerHTML = `<p class="text-center text-gray-400 py-4">今天還沒有紀錄喝水喔！</p>`;
+                return;
+            }
+            list.innerHTML = pet.waterIntake.slice(-5).reverse().map(w => `
+                <div class="bg-white p-3 rounded-xl flex justify-between items-center shadow-sm border border-gray-50 group">
+                    <div class="flex items-center space-x-3">
+                        <div class="bg-blue-50 p-2 rounded-lg text-blue-500"><i class="fas fa-tint"></i></div>
+                        <div>
+                            <h4 class="font-bold text-sm">${w.amount} ml</h4>
+                            <p class="text-[10px] text-gray-400">${w.date}</p>
+                        </div>
+                    </div>
+                    <button onclick="deleteWaterIntake('${w.id}')" class="text-gray-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-2">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function renderWeightList() {
+            const pet = pets.find(p => String(p.id) === String(selectedPetId));
+            const container = document.getElementById('weight-list-container');
+            if (!container) return;
+            
+            if (!pet || !pet.weightHistory || pet.weightHistory.length === 0) {
+                container.innerHTML = `<p class="text-center text-gray-400 text-xs py-2">無體重紀錄</p>`;
+                return;
+            }
+
+            container.innerHTML = pet.weightHistory.slice(-3).reverse().map(w => `
+                <div class="flex justify-between items-center py-2 border-b border-gray-50 last:border-0 group">
+                    <span class="text-xs text-gray-500">${w.date}</span>
+                    <div class="flex items-center space-x-4">
+                        <span class="text-sm font-bold text-gray-700">${w.weight} kg</span>
+                        <button onclick="deleteWeightRecord('${w.id}')" class="text-gray-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <i class="fas fa-trash-alt text-xs"></i>
+                        </button>
+                    </div>
                 </div>
             `).join('');
         }
@@ -1090,6 +1376,51 @@
         const savedBg = localStorage.getItem('customBg');
         if (savedBg) applyCustomBg(savedBg);
         renderAll();
+
+        // --- Notification Timer ---
+        setInterval(checkReminders, 60000); // Check every minute
+
+        function checkReminders() {
+            if (!notificationsEnabled) return;
+
+            const now = new Date();
+            const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+            globalTasks.forEach(task => {
+                if (task.time !== currentTime) return;
+
+                let shouldNotify = false;
+                if (task.repeat === 'daily') {
+                    shouldNotify = true;
+                } else if (task.repeat === 'weekly' && now.getDay() === 1) { // Assuming weekly tasks are on Monday
+                    shouldNotify = true;
+                } else if (task.repeat === 'monthly' && now.getDate() === 1) { // Assuming monthly tasks are on the 1st
+                    shouldNotify = true;
+                } else if (task.repeat === 'none' && !task.completed) {
+                    shouldNotify = true;
+                }
+
+                // Check if it was already completed today for recurring tasks
+                if (task.lastCompleted) {
+                    const lastCompletedDate = new Date(task.lastCompleted).toDateString();
+                    if (lastCompletedDate === now.toDateString()) {
+                        shouldNotify = false;
+                    }
+                }
+
+                if (shouldNotify) {
+                    new Notification('毛孩健康守護者提醒', {
+                        body: task.title,
+                        icon: 'https://cdn-icons-png.flaticon.com/512/616/616408.png'
+                    });
+                    // For non-repeating tasks, mark as completed to avoid re-notification
+                    if (task.repeat === 'none') {
+                        task.completed = true;
+                        saveAll();
+                    }
+                }
+            });
+        }
     </script>
 </body>
 </html>
