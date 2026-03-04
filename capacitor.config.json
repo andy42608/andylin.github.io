@@ -1,9 +1,0 @@
-{
-  "appId": "com.pethealth.guardian",
-  "appName": "毛孩健康守護者",
-  "webDir": ".",
-  "bundledWebRuntime": false,
-  "server": {
-    "androidScheme": "https"
-  }
-}
